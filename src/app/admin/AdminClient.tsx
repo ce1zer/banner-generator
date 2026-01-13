@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Field, HelpText, Input, Select, Textarea } from "@/components/ui/field";
 
 type ThemeRow = {
   id: string;
@@ -103,26 +106,25 @@ export default function AdminClient() {
 
   return (
     <div className="grid gap-6">
-      <div className="rounded-2xl border border-zinc-200 bg-white p-6">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="text-lg font-semibold">Admin — Themes</div>
-            <div className="text-sm text-zinc-700">
-              CRUD prompt templates + future-ready access tiers (not enforced yet)
+      <Card>
+        <CardContent>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-lg font-semibold">Admin — Themes</div>
+              <div className="text-sm text-zinc-700">
+                CRUD prompt templates + future-ready access tiers (not enforced yet)
+              </div>
             </div>
+            <Button onClick={createTheme} type="button">
+              New theme
+            </Button>
           </div>
-          <button
-            onClick={createTheme}
-            className="inline-flex h-10 items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800"
-            type="button"
-          >
-            New theme
-          </button>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
-        <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+        <Card>
+          <CardContent className="p-4">
           <div className="text-sm font-semibold">Themes</div>
           <div className="mt-3 grid gap-2">
             {loading ? (
@@ -150,9 +152,11 @@ export default function AdminClient() {
               ))
             )}
           </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="rounded-2xl border border-zinc-200 bg-white p-6">
+        <Card>
+          <CardContent>
           {!selected ? (
             <div className="text-sm text-zinc-600">Select a theme</div>
           ) : (
@@ -163,7 +167,8 @@ export default function AdminClient() {
               onDelete={deleteTheme}
             />
           )}
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
@@ -205,46 +210,38 @@ function ThemeEditor(props: {
           <div className="text-sm font-semibold">Edit theme</div>
           <div className="text-xs text-zinc-600">ID: {props.theme.id}</div>
         </div>
-        <button
-          onClick={() => props.onDelete()}
-          className="rounded-xl border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
-          type="button"
-        >
+        <Button onClick={() => props.onDelete()} variant="danger" size="sm" type="button">
           Delete
-        </button>
+        </Button>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="Name">
-          <input
+          <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="h-10 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm"
           />
         </Field>
         <Field label="Slug">
-          <input
+          <Input
             value={slug}
             onChange={(e) => setSlug(e.target.value)}
-            className="h-10 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm"
           />
         </Field>
         <Field label="Access tier (future-ready)">
-          <select
+          <Select
             value={accessTier}
             onChange={(e) => setAccessTier(e.target.value as any)}
-            className="h-10 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm"
           >
             <option value="free">free</option>
             <option value="pro">pro</option>
-          </select>
+          </Select>
         </Field>
         <Field label="Sort order">
-          <input
+          <Input
             type="number"
             value={sortOrder}
             onChange={(e) => setSortOrder(Number(e.target.value))}
-            className="h-10 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm"
           />
         </Field>
       </div>
@@ -260,39 +257,29 @@ function ThemeEditor(props: {
 
       <div className="grid gap-2">
         <div className="text-sm font-medium">Prompt template</div>
-        <div className="text-xs text-zinc-600">
+        <HelpText>
           Placeholders: <code>{"{{ASPECT}}"}</code>, <code>{"{{STYLE}}"}</code>,{" "}
           <code>{"{{THEME_NAME}}"}</code>, <code>{"{{THEME_SLUG}}"}</code>
-        </div>
-        <textarea
+        </HelpText>
+        <Textarea
           value={promptTemplate}
           onChange={(e) => setPromptTemplate(e.target.value)}
-          className="min-h-[260px] w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm"
+          className="min-h-[260px]"
         />
       </div>
 
       <div className="flex items-center gap-3">
-        <button
+        <Button
           onClick={save}
           disabled={saving}
-          className="inline-flex h-10 items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
           type="button"
         >
           {saving ? "Saving…" : "Save"}
-        </button>
+        </Button>
         <div className="text-xs text-zinc-600">
           Updated: {new Date(props.theme.updated_at).toLocaleString()}
         </div>
       </div>
-    </div>
-  );
-}
-
-function Field(props: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="grid gap-1">
-      <div className="text-sm font-medium">{props.label}</div>
-      {props.children}
     </div>
   );
 }

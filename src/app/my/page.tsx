@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requireUserOrRedirect } from "@/lib/auth/requireUser";
 import { createSignedUrl } from "@/lib/storage/admin";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +17,12 @@ export default async function MyPage() {
     .limit(25);
   if (error) {
     return (
-      <div className="rounded-2xl border border-zinc-200 bg-white p-6">
-        <div className="font-semibold">My Generations</div>
-        <div className="mt-2 text-sm text-red-700">{error.message}</div>
-      </div>
+      <Card>
+        <CardContent>
+          <div className="font-semibold">My Generations</div>
+          <div className="mt-2 text-sm text-red-700">{error.message}</div>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -38,36 +42,37 @@ export default async function MyPage() {
 
   return (
     <div className="grid gap-6">
-      <div className="rounded-2xl border border-zinc-200 bg-white p-6">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="text-lg font-semibold">My generations</div>
-            <div className="text-sm text-zinc-700">Your recent jobs</div>
+      <Card>
+        <CardContent>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-lg font-semibold">My generations</div>
+              <div className="text-sm text-zinc-700">Your recent jobs</div>
+            </div>
+            <Link href="/create">
+              <Button>New generation</Button>
+            </Link>
           </div>
-          <Link
-            href="/create"
-            className="inline-flex h-10 items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800"
-          >
-            New generation
-          </Link>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-3">
         {items.length === 0 ? (
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-sm text-zinc-700">
-            No generations yet.
-          </div>
+          <Card>
+            <CardContent className="text-sm text-zinc-700">
+              No generations yet.
+            </CardContent>
+          </Card>
         ) : null}
 
         {items.map((g) => (
           <Link
             key={g.id}
             href={`/my/${g.id}`}
-            className="rounded-2xl border border-zinc-200 bg-white p-4 hover:bg-zinc-50"
+            className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm hover:bg-zinc-50"
           >
             <div className="flex items-center gap-4">
-              <div className="h-16 w-16 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100">
+              <div className="h-16 w-16 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100">
                 {g.thumb ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={g.thumb} alt="" className="h-full w-full object-cover" />

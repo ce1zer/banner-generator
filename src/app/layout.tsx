@@ -32,9 +32,9 @@ export default function RootLayout({
       >
         <Providers>
           <div className="min-h-dvh bg-zinc-50 text-zinc-950">
-            <header className="border-b border-zinc-200 bg-white">
-              <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
-                <Link href="/" className="font-semibold tracking-tight">
+            <header className="border-b border-zinc-200 bg-white/70 backdrop-blur">
+              <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
+                <Link href="/" className="text-sm font-semibold tracking-tight">
                   Bully Agency
                 </Link>
                 <nav className="flex items-center gap-4 text-sm text-zinc-700">
@@ -50,7 +50,7 @@ export default function RootLayout({
                 </nav>
               </div>
             </header>
-            <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
+            <main className="mx-auto max-w-3xl px-4 py-10">{children}</main>
           </div>
         </Providers>
       </body>

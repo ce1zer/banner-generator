@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { ThemeListItem } from "@/lib/types/models";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Field, HelpText, Input, Label, Select } from "@/components/ui/field";
 import {
   clearDraftPhoto,
   getOrCreateDraftId,
@@ -207,113 +210,107 @@ export default function CreatePage() {
 
   return (
     <div className="grid gap-6">
-      <div className="rounded-2xl border border-zinc-200 bg-white p-6">
-        <div className="grid gap-1">
-          <h2 className="text-lg font-semibold">Create</h2>
-          <p className="text-sm text-zinc-700">
-            Step 1) Choose theme → Step 2) Upload dog photo → Step 3) Generate
-          </p>
-        </div>
-
-        <div className="mt-6 grid gap-4">
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Theme</label>
-            <select
-              value={themeId}
-              onChange={(e) => setThemeId(e.target.value)}
-              className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
-              disabled={loadingThemes}
-            >
-              <option value="">{loadingThemes ? "Loading…" : "Select a theme"}</option>
-              {themeOptions}
-            </select>
+      <Card>
+        <CardContent>
+          <div className="grid gap-1">
+            <h2 className="text-lg font-semibold">Create</h2>
+            <p className="text-sm text-zinc-700">
+              Choose a theme, upload one dog photo, and generate one 4:5 composition.
+            </p>
           </div>
 
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Title (optional)</label>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
-              placeholder="e.g., Bullies for the Win"
-            />
-          </div>
+          <div className="mt-6 grid gap-4">
+            <Field label="Theme">
+              <Select
+                value={themeId}
+                onChange={(e) => setThemeId(e.target.value)}
+                disabled={loadingThemes}
+              >
+                <option value="">{loadingThemes ? "Loading…" : "Select a theme"}</option>
+                {themeOptions}
+              </Select>
+            </Field>
 
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Subtitle (optional)</label>
-            <input
-              value={subtitle}
-              onChange={(e) => setSubtitle(e.target.value)}
-              className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
-              placeholder="e.g., XL • ABKC • Health Tested"
-            />
-          </div>
+            <Field label="Title (optional)">
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g., Bullies for the Win"
+              />
+            </Field>
 
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Contact (optional)</label>
-            <input
-              value={contact}
-              onChange={(e) => setContact(e.target.value)}
-              className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
-              placeholder="e.g., @instagram or phone"
-            />
-          </div>
+            <Field label="Subtitle (optional)">
+              <Input
+                value={subtitle}
+                onChange={(e) => setSubtitle(e.target.value)}
+                placeholder="e.g., XL • ABKC • Health Tested"
+              />
+            </Field>
 
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Dog photo (required)</label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => onPickPhoto(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm"
-            />
-            {dogPhoto ? (
-              <div className="text-xs text-zinc-600">
-                Selected: <span className="font-medium">{dogPhoto.name}</span>{" "}
-                <button
-                  className="ml-2 underline"
-                  onClick={() => onPickPhoto(null)}
-                  type="button"
-                >
-                  remove
-                </button>
-              </div>
-            ) : null}
-          </div>
+            <Field label="Contact (optional)">
+              <Input
+                value={contact}
+                onChange={(e) => setContact(e.target.value)}
+                placeholder="e.g., @instagram or phone"
+              />
+            </Field>
 
-          <div className="pt-2">
-            <button
-              onClick={startGeneration}
-              className="inline-flex h-11 items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
-              disabled={view.state === "starting" || view.state === "polling"}
-              type="button"
-            >
-              {view.state === "starting" || view.state === "polling"
-                ? "Generating…"
-                : "Generate (4:5)"}
-            </button>
+            <div className="grid gap-2">
+              <Label>Dog photo (required)</Label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => onPickPhoto(e.target.files?.[0] ?? null)}
+                className="block w-full text-sm"
+              />
+              {dogPhoto ? (
+                <HelpText>
+                  Selected: <span className="font-medium">{dogPhoto.name}</span>{" "}
+                  <button
+                    className="ml-2 underline"
+                    onClick={() => onPickPhoto(null)}
+                    type="button"
+                  >
+                    remove
+                  </button>
+                </HelpText>
+              ) : (
+                <HelpText>One reference image per generation.</HelpText>
+              )}
+            </div>
+
+            <div className="pt-2">
+              <Button
+                onClick={startGeneration}
+                disabled={view.state === "starting" || view.state === "polling"}
+                type="button"
+                className="w-full"
+              >
+                {view.state === "starting" || view.state === "polling"
+                  ? "Generating…"
+                  : "Generate (4:5)"}
+              </Button>
+            </div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {view.state === "succeeded" ? (
         <ResultCard signedUrl={view.signedUrl} />
       ) : null}
 
       {view.state === "failed" ? (
-        <div className="rounded-2xl border border-red-200 bg-white p-6">
+        <Card className="border-red-200">
+          <CardContent>
           <div className="font-semibold text-red-700">Generation failed</div>
           <div className="mt-1 text-sm text-zinc-700">{view.error}</div>
           <div className="mt-4">
-            <button
-              onClick={startGeneration}
-              className="inline-flex h-10 items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800"
-              type="button"
-            >
+            <Button onClick={startGeneration} type="button">
               Retry
-            </button>
+            </Button>
           </div>
-        </div>
+          </CardContent>
+        </Card>
       ) : null}
 
       <AuthModal
@@ -346,25 +343,23 @@ export default function CreatePage() {
 
 function ResultCard({ signedUrl }: { signedUrl: string }) {
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="text-sm font-semibold">Result</div>
-          <div className="text-sm text-zinc-700">Your generated 4:5 composition</div>
+    <Card>
+      <CardContent>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-sm font-semibold">Result</div>
+            <div className="text-sm text-zinc-700">Your generated 4:5 composition</div>
+          </div>
+          <a href={signedUrl} download>
+            <Button>Download</Button>
+          </a>
         </div>
-        <a
-          href={signedUrl}
-          download
-          className="inline-flex h-10 items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800"
-        >
-          Download
-        </a>
-      </div>
-      <div className="mt-4 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={signedUrl} alt="Generated" className="h-auto w-full" />
-      </div>
-    </div>
+        <div className="mt-4 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={signedUrl} alt="Generated" className="h-auto w-full" />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -379,7 +374,7 @@ function AuthModal(props: {
   if (!props.open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-lg font-semibold">Login required</div>
@@ -397,25 +392,24 @@ function AuthModal(props: {
         </div>
 
         <div className="mt-4 grid gap-2">
-          <label className="text-sm font-medium">Email</label>
-          <input
+          <Label>Email</Label>
+          <Input
             value={props.email}
             onChange={(e) => props.setEmail(e.target.value)}
-            className="h-10 rounded-xl border border-zinc-300 bg-white px-3 text-sm"
             placeholder="you@example.com"
             type="email"
           />
         </div>
 
         <div className="mt-4 flex items-center justify-between gap-3">
-          <button
+          <Button
             onClick={props.onSendLink}
-            className="inline-flex h-10 flex-1 items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
             disabled={!props.email}
             type="button"
+            className="flex-1"
           >
             Send magic link
-          </button>
+          </Button>
         </div>
 
         {props.authSent ? (
