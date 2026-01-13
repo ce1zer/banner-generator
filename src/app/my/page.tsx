@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 export const dynamic = "force-dynamic";
 
 export default async function MyPage() {
-  const { supabase, user } = await requireUserOrRedirect("/create");
+  const { supabase, user } = await requireUserOrRedirect("/login?next=/my");
 
   const { data, error } = await supabase
     .from("generations")

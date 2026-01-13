@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  await requireUserOrRedirect("/create");
+  await requireUserOrRedirect("/login?next=/admin");
 
   try {
     await requireAdminOrThrow();

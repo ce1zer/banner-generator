@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 export const dynamic = "force-dynamic";
 
 export default async function MyGenerationPage(props: { params: Promise<{ id: string }> }) {
-  const { supabase, user } = await requireUserOrRedirect("/create");
+  const { supabase, user } = await requireUserOrRedirect("/login?next=/my");
   const { id } = z.object({ id: z.string().uuid() }).parse(await props.params);
 
   const { data: gen, error } = await supabase
