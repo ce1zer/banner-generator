@@ -7,6 +7,14 @@ const serverEnvSchema = z.object({
   ADMIN_EMAILS: z.string().optional(),
   NANO_BANANA_API_KEY: z.string().optional(),
   NANO_BANANA_API_URL: z.string().url().optional(),
+  // Nano Banana adapter wiring (kept flexible to avoid assuming provider schema).
+  NANO_BANANA_REQUEST_TEMPLATE_JSON: z.string().optional(),
+  NANO_BANANA_AUTH_HEADER: z.string().optional(),
+  NANO_BANANA_AUTH_VALUE_TEMPLATE: z.string().optional(),
+  NANO_BANANA_RESPONSE_MODE: z.string().optional(), // "auto" | "image" | "json_base64" | "json_url"
+  NANO_BANANA_JSON_IMAGE_BASE64_FIELD: z.string().optional(),
+  NANO_BANANA_JSON_IMAGE_URL_FIELD: z.string().optional(),
+  NANO_BANANA_JSON_CONTENT_TYPE_FIELD: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

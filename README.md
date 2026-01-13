@@ -36,6 +36,7 @@ Optional:
 
 - `NANO_BANANA_API_URL`, `NANO_BANANA_API_KEY`
   - If missing, the app returns a generated placeholder PNG so the full flow works locally.
+  - To call the real provider without hardcoding field names, set `NANO_BANANA_REQUEST_TEMPLATE_JSON` (see Nano Banana adapter section).
 
 4. Apply database migration
 
@@ -130,9 +131,38 @@ Contract:
 ### TODO (provider mapping)
 
 The adapter intentionally does **not** assume exact Nano Banana Pro request/response fields.
-When you have the provider docs, implement the mapping inside:
+Instead, you configure a **JSON request template** in env and the adapter replaces placeholders.
 
-- `callNanoBananaApi(...)` in `src/lib/nanoBanana/index.ts`
+Required env vars to call the real provider:
+
+- `NANO_BANANA_API_URL`
+- `NANO_BANANA_API_KEY`
+- `NANO_BANANA_REQUEST_TEMPLATE_JSON`
+
+Placeholders supported inside `NANO_BANANA_REQUEST_TEMPLATE_JSON`:
+
+- `{{PROMPT}}`
+- `{{REFERENCE_IMAGE_URL}}` (short-lived signed URL created server-side)
+- `{{ASPECT}}` (always `4:5`)
+
+Example (adjust keys to match provider docs):
+
+```json
+{
+  "prompt": "{{PROMPT}}",
+  "reference_image_url": "{{REFERENCE_IMAGE_URL}}",
+  "aspect_ratio": "{{ASPECT}}"
+}
+```
+
+Optional env vars:
+
+- `NANO_BANANA_AUTH_HEADER` (default `Authorization`)
+- `NANO_BANANA_AUTH_VALUE_TEMPLATE` (default `Bearer {{API_KEY}}`)
+- `NANO_BANANA_RESPONSE_MODE` (`auto` default; or `image`, `json_base64`, `json_url`)
+- `NANO_BANANA_JSON_IMAGE_BASE64_FIELD` (default `image_base64`)
+- `NANO_BANANA_JSON_IMAGE_URL_FIELD` (default `image_url`)
+- `NANO_BANANA_JSON_CONTENT_TYPE_FIELD` (default `content_type`)
 
 ## Deployment (Vercel)
 

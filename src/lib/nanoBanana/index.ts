@@ -1,5 +1,7 @@
 import { PNG } from "pngjs";
 import { getServerEnv } from "@/lib/supabase/env";
+import sharp from "sharp";
+import { renderTemplateValue, safeJsonParse } from "./template";
 
 export type NanoBananaResult = {
   buffer: Buffer;
@@ -30,20 +32,128 @@ export async function generateComposition(args: {
 }
 
 async function callNanoBananaApi(
-  _env: ReturnType<typeof getServerEnv>,
-  _args: { prompt: string; aspect: "4:5"; referenceImageUrl: string },
-  _signal: AbortSignal,
+  env: ReturnType<typeof getServerEnv>,
+  args: { prompt: string; aspect: "4:5"; referenceImageUrl: string },
+  signal: AbortSignal,
 ): Promise<NanoBananaResult> {
-  // TODO: Implement provider-specific request/response mapping here.
-  // Requirements:
-  // - server-side only
-  // - must send: prompt string + reference image + aspect ratio 4:5
-  // - return: {buffer, contentType, width, height}
+  if (!env.NANO_BANANA_API_URL || !env.NANO_BANANA_API_KEY) {
+    return generatePlaceholderPng();
+  }
+
+  // IMPORTANT: We still avoid assuming Nano Banana's exact request field names.
+  // You configure a JSON request template in env and we just replace placeholders.
   //
-  // IMPORTANT: Avoid assuming exact request fields until you have the provider docs.
-  throw new Error(
-    "Nano Banana adapter is not configured. TODO: Implement request/response mapping in src/lib/nanoBanana/index.ts",
+  // Example template:
+  // { "prompt": "{{PROMPT}}", "reference_image_url": "{{REFERENCE_IMAGE_URL}}", "aspect_ratio": "{{ASPECT}}" }
+  if (!env.NANO_BANANA_REQUEST_TEMPLATE_JSON) {
+    throw new Error(
+      "Missing NANO_BANANA_REQUEST_TEMPLATE_JSON. Provide a JSON body template using placeholders {{PROMPT}}, {{REFERENCE_IMAGE_URL}}, {{ASPECT}}.",
+    );
+  }
+
+  const requestTemplate = safeJsonParse<Record<string, unknown>>(
+    env.NANO_BANANA_REQUEST_TEMPLATE_JSON,
   );
+  const payload = renderTemplateValue(requestTemplate, {
+    PROMPT: args.prompt,
+    REFERENCE_IMAGE_URL: args.referenceImageUrl,
+    ASPECT: args.aspect,
+  });
+
+  const authHeader = env.NANO_BANANA_AUTH_HEADER ?? "Authorization";
+  const authValueTemplate = env.NANO_BANANA_AUTH_VALUE_TEMPLATE ?? "Bearer {{API_KEY}}";
+  const authValue = authValueTemplate.replaceAll("{{API_KEY}}", env.NANO_BANANA_API_KEY);
+
+  const res = await fetch(env.NANO_BANANA_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      [authHeader]: authValue,
+    },
+    body: JSON.stringify(payload),
+    signal,
+  });
+
+  const contentTypeHeader = res.headers.get("content-type") ?? "";
+
+  if (!res.ok) {
+    const errBody = contentTypeHeader.includes("application/json")
+      ? JSON.stringify(await res.json())
+      : await res.text();
+    throw new Error(`Nano Banana error (${res.status}): ${errBody}`);
+  }
+
+  // 1) Provider returns raw image bytes
+  if (contentTypeHeader.startsWith("image/")) {
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const meta = await sharp(buffer).metadata();
+    return {
+      buffer,
+      contentType: contentTypeHeader,
+      width: meta.width ?? 1024,
+      height: meta.height ?? 1280,
+    };
+  }
+
+  // 2) Provider returns JSON (base64 or URL to fetch)
+  const json = contentTypeHeader.includes("application/json")
+    ? await res.json()
+    : null;
+  if (!json) {
+    throw new Error(`Unexpected Nano Banana response content-type: ${contentTypeHeader}`);
+  }
+
+  const mode = (env.NANO_BANANA_RESPONSE_MODE ?? "auto").toLowerCase();
+  const base64Field = env.NANO_BANANA_JSON_IMAGE_BASE64_FIELD ?? "image_base64";
+  const urlField = env.NANO_BANANA_JSON_IMAGE_URL_FIELD ?? "image_url";
+  const ctField = env.NANO_BANANA_JSON_CONTENT_TYPE_FIELD ?? "content_type";
+
+  const jsonObj = json as Record<string, unknown>;
+  const jsonCt = (jsonObj[ctField] as string | undefined) ?? "image/png";
+
+  const tryBase64 = () => {
+    const b64 = jsonObj[base64Field];
+    if (typeof b64 !== "string" || !b64) return null;
+    const cleaned = b64.includes(",") ? b64.split(",").pop()! : b64;
+    return Buffer.from(cleaned, "base64");
+  };
+  const tryUrl = () => {
+    const url = jsonObj[urlField];
+    if (typeof url !== "string" || !url) return null;
+    return url;
+  };
+
+  let buffer: Buffer | null = null;
+  let contentType = jsonCt;
+
+  if (mode === "json_base64" || mode === "auto") {
+    buffer = tryBase64();
+  }
+
+  if (!buffer && (mode === "json_url" || mode === "auto")) {
+    const url = tryUrl();
+    if (url) {
+      const imgRes = await fetch(url, { signal });
+      if (!imgRes.ok) throw new Error(`Nano Banana image fetch failed: ${imgRes.status}`);
+      contentType = imgRes.headers.get("content-type") ?? contentType;
+      buffer = Buffer.from(await imgRes.arrayBuffer());
+    }
+  }
+
+  if (!buffer) {
+    const keys = Object.keys(jsonObj).slice(0, 25).join(", ");
+    throw new Error(
+      `Nano Banana JSON response missing image. Looked for base64 field "${base64Field}" or url field "${urlField}". Keys: ${keys}`,
+    );
+  }
+
+  const meta = await sharp(buffer).metadata();
+  return {
+    buffer,
+    contentType,
+    width: meta.width ?? 1024,
+    height: meta.height ?? 1280,
+  };
 }
 
 async function callWithTimeout<T>(
