@@ -16,7 +16,17 @@ for insert
 to authenticated
 with check (
   bucket_id = 'uploads'
-  and owner = auth.uid()
-  and name like (auth.uid()::text || '/%')
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+-- Optional but helpful: allow the user to select/list their own uploaded objects.
+drop policy if exists "uploads_select_own_folder" on storage.objects;
+create policy "uploads_select_own_folder"
+on storage.objects
+for select
+to authenticated
+using (
+  bucket_id = 'uploads'
+  and (storage.foldername(name))[1] = auth.uid()::text
 );
 
