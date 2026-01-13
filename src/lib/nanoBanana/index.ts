@@ -64,6 +64,28 @@ async function callNanoBananaApi(
   const authValueTemplate = env.NANO_BANANA_AUTH_VALUE_TEMPLATE ?? "Bearer {{API_KEY}}";
   const authValue = authValueTemplate.replaceAll("{{API_KEY}}", env.NANO_BANANA_API_KEY);
 
+  // Basic URL validation helps avoid undici's opaque "expected pattern" error.
+  try {
+    new URL(env.NANO_BANANA_API_URL);
+  } catch {
+    throw new Error(
+      `Invalid NANO_BANANA_API_URL (must be an absolute URL): "${env.NANO_BANANA_API_URL}"`,
+    );
+  }
+
+  // Debug logging is intentionally "safe": it never prints API keys, prompts, or full signed URLs.
+  const debugEnabled =
+    (process.env.NANO_BANANA_DEBUG ?? "").toLowerCase() === "1" ||
+    (process.env.NANO_BANANA_DEBUG ?? "").toLowerCase() === "true";
+  const safeUrl = (raw: string) => {
+    try {
+      const u = new URL(raw);
+      return `${u.protocol}//${u.host}${u.pathname}`;
+    } catch {
+      return "(invalid-url)";
+    }
+  };
+
   const res = await fetch(env.NANO_BANANA_API_URL, {
     method: "POST",
     headers: {
@@ -80,11 +102,26 @@ async function callNanoBananaApi(
     const errBody = contentTypeHeader.includes("application/json")
       ? JSON.stringify(await res.json())
       : await res.text();
+    if (debugEnabled) {
+      console.error("[NanoBanana] non-2xx response", {
+        status: res.status,
+        contentType: contentTypeHeader,
+        apiUrl: safeUrl(env.NANO_BANANA_API_URL),
+        referenceImageUrl: safeUrl(args.referenceImageUrl),
+        bodyPreview: errBody.slice(0, 800),
+      });
+    }
     throw new Error(`Nano Banana error (${res.status}): ${errBody}`);
   }
 
   // 1) Provider returns raw image bytes
   if (contentTypeHeader.startsWith("image/")) {
+    if (debugEnabled) {
+      console.error("[NanoBanana] response=raw_image", {
+        contentType: contentTypeHeader,
+        apiUrl: safeUrl(env.NANO_BANANA_API_URL),
+      });
+    }
     const buffer = Buffer.from(await res.arrayBuffer());
     const meta = await sharp(buffer).metadata();
     return {
@@ -100,6 +137,12 @@ async function callNanoBananaApi(
     ? await res.json()
     : null;
   if (!json) {
+    if (debugEnabled) {
+      console.error("[NanoBanana] unexpected response content-type", {
+        contentType: contentTypeHeader,
+        apiUrl: safeUrl(env.NANO_BANANA_API_URL),
+      });
+    }
     throw new Error(`Unexpected Nano Banana response content-type: ${contentTypeHeader}`);
   }
 
@@ -126,6 +169,19 @@ async function callNanoBananaApi(
   let buffer: Buffer | null = null;
   let contentType = jsonCt;
 
+  if (debugEnabled) {
+    console.error("[NanoBanana] response=json", {
+      apiUrl: safeUrl(env.NANO_BANANA_API_URL),
+      mode,
+      contentType: contentTypeHeader,
+      jsonKeys: Object.keys(jsonObj).slice(0, 40),
+      base64Field,
+      urlField,
+      hasBase64Field: typeof jsonObj[base64Field] === "string",
+      hasUrlField: typeof jsonObj[urlField] === "string",
+    });
+  }
+
   if (mode === "json_base64" || mode === "auto") {
     buffer = tryBase64();
   }
@@ -133,6 +189,17 @@ async function callNanoBananaApi(
   if (!buffer && (mode === "json_url" || mode === "auto")) {
     const url = tryUrl();
     if (url) {
+      try {
+        new URL(url);
+      } catch {
+        if (debugEnabled) {
+          console.error("[NanoBanana] invalid json_url field", {
+            urlField,
+            urlValuePreview: String(url).slice(0, 200),
+          });
+        }
+        throw new Error(`Nano Banana returned invalid image URL in "${urlField}"`);
+      }
       const imgRes = await fetch(url, { signal });
       if (!imgRes.ok) throw new Error(`Nano Banana image fetch failed: ${imgRes.status}`);
       contentType = imgRes.headers.get("content-type") ?? contentType;
