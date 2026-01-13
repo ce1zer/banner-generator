@@ -1,5 +1,12 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
+function normalizePath(bucket: "uploads" | "generated", path: string) {
+  // Older versions of the app stored paths with a bucket prefix like "uploads/<uid>/..."
+  // but Supabase Storage expects paths *inside* the bucket.
+  const prefix = `${bucket}/`;
+  return path.startsWith(prefix) ? path.slice(prefix.length) : path;
+}
+
 export async function uploadPrivateObject(args: {
   bucket: "uploads" | "generated";
   path: string;
@@ -7,7 +14,9 @@ export async function uploadPrivateObject(args: {
   contentType: string;
 }) {
   const supabase = createSupabaseAdminClient();
-  const { error } = await supabase.storage.from(args.bucket).upload(args.path, args.data, {
+  const { error } = await supabase.storage
+    .from(args.bucket)
+    .upload(normalizePath(args.bucket, args.path), args.data, {
     contentType: args.contentType,
     upsert: true,
   });
@@ -22,7 +31,7 @@ export async function createSignedUrl(args: {
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase.storage
     .from(args.bucket)
-    .createSignedUrl(args.path, args.expiresInSeconds);
+    .createSignedUrl(normalizePath(args.bucket, args.path), args.expiresInSeconds);
   if (error) throw new Error(`Signed URL failed: ${error.message}`);
   return data.signedUrl;
 }

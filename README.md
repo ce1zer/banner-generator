@@ -59,6 +59,15 @@ In Supabase Storage:
 
 This MVP uses the **service role key** server-side to upload and create signed URLs, so you do *not* need complex Storage RLS policies yet.
 
+### IMPORTANT (Vercel payload limits)
+
+Vercel serverless functions can reject large multipart uploads (`FUNCTION_PAYLOAD_TOO_LARGE`).
+This MVP uploads the dog photo **directly from the browser to Supabase Storage**.
+
+Apply the Storage policy migration:
+
+- `supabase/migrations/002_storage_uploads_policy.sql`
+
 6. Configure Auth (magic link)
 
 In Supabase Auth:

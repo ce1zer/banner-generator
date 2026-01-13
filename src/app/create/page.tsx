@@ -7,6 +7,7 @@ import type { ThemeListItem } from "@/lib/types/models";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Field, HelpText, Input, Label, Select } from "@/components/ui/field";
+import { makeUploadPath } from "@/lib/storage/paths";
 import {
   clearDraftPhoto,
   getOrCreateDraftId,
@@ -136,14 +137,36 @@ export default function CreatePage() {
 
     setView({ state: "starting" });
     try {
-      const fd = new FormData();
-      fd.set("themeId", themeId);
-      fd.set("title", title);
-      fd.set("subtitle", subtitle);
-      fd.set("contact", contact);
-      fd.set("dogPhoto", dogPhoto);
+      // Upload directly to Supabase Storage to avoid Vercel serverless body limits.
+      const userId = session.user.id;
+      const ext = guessExt(dogPhoto);
+      const dogPhotoPath = makeUploadPath({
+        userId,
+        objectId: crypto.randomUUID(),
+        ext,
+      });
 
-      const res = await fetch("/api/generations/start", { method: "POST", body: fd });
+      const { error: uploadErr } = await supabase.storage
+        .from("uploads")
+        .upload(dogPhotoPath, dogPhoto, {
+          contentType: dogPhoto.type || "application/octet-stream",
+          upsert: false,
+        });
+      if (uploadErr) {
+        throw new Error(`Upload failed: ${uploadErr.message}`);
+      }
+
+      const res = await fetch("/api/generations/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          themeId,
+          title,
+          subtitle,
+          contact,
+          dogPhotoPath,
+        }),
+      });
       const json = (await res.json()) as { generationId?: string; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to start generation");
       const generationId = json.generationId!;
@@ -339,6 +362,17 @@ export default function CreatePage() {
       />
     </div>
   );
+}
+
+function guessExt(file: File) {
+  const name = file.name.toLowerCase();
+  const fromName = name.split(".").pop();
+  if (fromName && fromName.length <= 6) return fromName;
+  const type = file.type.toLowerCase();
+  if (type.includes("jpeg")) return "jpg";
+  if (type.includes("png")) return "png";
+  if (type.includes("webp")) return "webp";
+  return "jpg";
 }
 
 function ResultCard({ signedUrl }: { signedUrl: string }) {

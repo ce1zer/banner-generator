@@ -3,8 +3,8 @@ import { z } from "zod";
 import { requireUserOrThrow } from "@/lib/auth/requireUser";
 import { createSupabasePublicClient } from "@/lib/supabase/public";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { uploadPrivateObject, createSignedUrl } from "@/lib/storage/admin";
-import { makeGeneratedPath, makeUploadPath } from "@/lib/storage/paths";
+import { createSignedUrl } from "@/lib/storage/admin";
+import { makeGeneratedPath } from "@/lib/storage/paths";
 import { renderPromptTemplate } from "@/lib/prompt/render";
 import { generateComposition } from "@/lib/nanoBanana";
 import { errorMessage, isUnauthenticated } from "@/lib/util/http";
@@ -14,6 +14,8 @@ const inputSchema = z.object({
   title: z.string().max(120).optional().or(z.literal("")),
   subtitle: z.string().max(200).optional().or(z.literal("")),
   contact: z.string().max(200).optional().or(z.literal("")),
+  // Path inside the "uploads" bucket (private). This avoids Vercel request body limits.
+  dogPhotoPath: z.string().min(3),
 });
 
 const HARD_TIMEOUT_MS = 55_000;
@@ -22,17 +24,22 @@ export async function POST(request: Request) {
   try {
     const { supabase: supabaseUser, user } = await requireUserOrThrow();
 
-    const form = await request.formData();
-    const raw = {
-      themeId: String(form.get("themeId") ?? ""),
-      title: String(form.get("title") ?? ""),
-      subtitle: String(form.get("subtitle") ?? ""),
-      contact: String(form.get("contact") ?? ""),
-    };
-    const parsed = inputSchema.parse(raw);
-    const dogPhoto = form.get("dogPhoto");
-    if (!(dogPhoto instanceof File)) {
-      return NextResponse.json({ error: "Upload required" }, { status: 400 });
+    if (!request.headers.get("content-type")?.includes("application/json")) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid request. Expected application/json. Upload the dog photo directly to Supabase Storage, then pass dogPhotoPath.",
+        },
+        { status: 415 },
+      );
+    }
+
+    const parsed = inputSchema.parse(await request.json());
+
+    // Ensure the client can only reference their own uploaded file.
+    // uploads bucket path must start with "<user_id>/".
+    if (!parsed.dogPhotoPath.startsWith(`${user.id}/`)) {
+      return NextResponse.json({ error: "Invalid dogPhotoPath" }, { status: 400 });
     }
 
     // Validate theme is active (public RLS allows selecting active themes).
@@ -67,7 +74,14 @@ export async function POST(request: Request) {
     // Run inline generation with a hard timeout (Vercel safety).
     const generationId = gen.id;
     await callWithHardTimeout(
-      () => runInlineGeneration({ supabaseUser, userId: user.id, generationId, theme, dogPhoto }),
+      () =>
+        runInlineGeneration({
+          supabaseUser,
+          userId: user.id,
+          generationId,
+          theme,
+          dogPhotoPath: parsed.dogPhotoPath,
+        }),
       HARD_TIMEOUT_MS,
     );
 
@@ -91,30 +105,15 @@ async function runInlineGeneration(args: {
   userId: string;
   generationId: string;
   theme: { id: string; name: string; slug: string; prompt_template: string };
-  dogPhoto: File;
+  dogPhotoPath: string;
 }) {
   // TODO (future worker): move this function into a background worker (Edge Function / queue)
   // and have /api/generations/start only enqueue + return generationId.
   const supabaseAdmin = createSupabaseAdminClient();
 
-  const photoExt = guessExt(args.dogPhoto);
-  const uploadPath = makeUploadPath({
-    userId: args.userId,
-    objectId: crypto.randomUUID(),
-    ext: photoExt,
-  });
-
-  const photoBytes = Buffer.from(await args.dogPhoto.arrayBuffer());
-  await uploadPrivateObject({
-    bucket: "uploads",
-    path: uploadPath,
-    data: photoBytes,
-    contentType: args.dogPhoto.type || "application/octet-stream",
-  });
-
   const referenceImageUrl = await createSignedUrl({
     bucket: "uploads",
-    path: uploadPath,
+    path: args.dogPhotoPath,
     expiresInSeconds: 60 * 5,
   });
 
@@ -131,7 +130,7 @@ async function runInlineGeneration(args: {
       .from("generations")
       .update({
         status: "generating",
-        dog_photo_path: uploadPath,
+        dog_photo_path: args.dogPhotoPath,
         prompt_final: promptFinal,
         error: null,
       })
@@ -179,17 +178,6 @@ async function runInlineGeneration(args: {
     if (error) throw new Error(error.message);
     throw err;
   }
-}
-
-function guessExt(file: File) {
-  const name = file.name.toLowerCase();
-  const fromName = name.split(".").pop();
-  if (fromName && fromName.length <= 6) return fromName;
-  const type = file.type.toLowerCase();
-  if (type.includes("jpeg")) return "jpg";
-  if (type.includes("png")) return "png";
-  if (type.includes("webp")) return "webp";
-  return "jpg";
 }
 
 async function callWithHardTimeout<T>(fn: () => Promise<T>, ms: number): Promise<T> {
