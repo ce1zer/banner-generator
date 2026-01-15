@@ -54,9 +54,31 @@ async function callNanoBananaApi(
   const requestTemplate = safeJsonParse<Record<string, unknown>>(
     env.NANO_BANANA_REQUEST_TEMPLATE_JSON,
   );
+  const apiUrl = new URL(env.NANO_BANANA_API_URL);
+  const isGemini = apiUrl.host === "generativelanguage.googleapis.com";
+
+  // Fetch reference image bytes when needed (Gemini requires inline_data; also supported via template placeholders).
+  const templateRaw = env.NANO_BANANA_REQUEST_TEMPLATE_JSON;
+  const needsInlineImage =
+    isGemini ||
+    templateRaw.includes("{{REFERENCE_IMAGE_BASE64}}") ||
+    templateRaw.includes("{{REFERENCE_IMAGE_MIME}}");
+
+  let refMime = "";
+  let refBase64 = "";
+  if (needsInlineImage) {
+    const imgRes = await fetch(args.referenceImageUrl, { signal });
+    if (!imgRes.ok) throw new Error(`Failed to fetch reference image: ${imgRes.status}`);
+    refMime = imgRes.headers.get("content-type") ?? "image/jpeg";
+    const bytes = Buffer.from(await imgRes.arrayBuffer());
+    refBase64 = bytes.toString("base64");
+  }
+
   const payload = renderTemplateValue(requestTemplate, {
     PROMPT: args.prompt,
     REFERENCE_IMAGE_URL: args.referenceImageUrl,
+    REFERENCE_IMAGE_MIME: refMime,
+    REFERENCE_IMAGE_BASE64: refBase64,
     ASPECT: args.aspect,
   });
 
@@ -86,12 +108,17 @@ async function callNanoBananaApi(
     }
   };
 
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  // Allow disabling auth header for providers that use ?key=... (Gemini).
+  if (authHeader && authHeader.trim().length > 0 && authHeader !== "x-ignore-auth") {
+    headers[authHeader] = authValue;
+  } else if (authHeader === "x-ignore-auth") {
+    headers[authHeader] = authValue;
+  }
+
   const res = await fetch(env.NANO_BANANA_API_URL, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      [authHeader]: authValue,
-    },
+    headers,
     body: JSON.stringify(payload),
     signal,
   });
@@ -153,6 +180,26 @@ async function callNanoBananaApi(
 
   const jsonObj = json as Record<string, unknown>;
   const jsonCt = (jsonObj[ctField] as string | undefined) ?? "image/png";
+
+  // Gemini: response image is nested as candidates[].content.parts[].inline_data
+  if (isGemini) {
+    const gem = extractGeminiInlineImage(jsonObj);
+    if (!gem) {
+      const keys = Object.keys(jsonObj).slice(0, 25).join(", ");
+      throw new Error(
+        `Gemini response did not contain inline_data image. Top-level keys: ${keys}`,
+      );
+    }
+    const buffer = Buffer.from(gem.data, "base64");
+    const contentType = gem.mimeType || "image/png";
+    const meta = await sharp(buffer).metadata();
+    return {
+      buffer,
+      contentType,
+      width: meta.width ?? 1024,
+      height: meta.height ?? 1280,
+    };
+  }
 
   const tryBase64 = () => {
     const b64 = jsonObj[base64Field];
@@ -221,6 +268,27 @@ async function callNanoBananaApi(
     width: meta.width ?? 1024,
     height: meta.height ?? 1280,
   };
+}
+
+function extractGeminiInlineImage(json: Record<string, unknown>): { data: string; mimeType?: string } | null {
+  // Expected-ish shape:
+  // { candidates: [ { content: { parts: [ { inline_data: { mime_type, data } } ] } } ] }
+  const candidates = json["candidates"];
+  if (!Array.isArray(candidates)) return null;
+  for (const cand of candidates) {
+    const content = (cand as any)?.content;
+    const parts = content?.parts;
+    if (!Array.isArray(parts)) continue;
+    for (const part of parts) {
+      const inline = (part as any)?.inline_data ?? (part as any)?.inlineData;
+      const data = inline?.data;
+      const mimeType = inline?.mime_type ?? inline?.mimeType;
+      if (typeof data === "string" && data.length > 0) {
+        return { data, mimeType: typeof mimeType === "string" ? mimeType : undefined };
+      }
+    }
+  }
+  return null;
 }
 
 async function callWithTimeout<T>(

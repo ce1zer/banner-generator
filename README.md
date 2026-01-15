@@ -164,6 +164,29 @@ Example (adjust keys to match provider docs):
 }
 ```
 
+### Gemini `generateContent` (inline_data) example
+
+If `NANO_BANANA_API_URL` points to `generativelanguage.googleapis.com`, the adapter will fetch the signed reference image server-side and fill:
+
+- `{{REFERENCE_IMAGE_MIME}}`
+- `{{REFERENCE_IMAGE_BASE64}}`
+
+Example template (paste as a single line JSON string in Vercel):
+
+```json
+{
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        { "text": "{{PROMPT}}" },
+        { "inline_data": { "mime_type": "{{REFERENCE_IMAGE_MIME}}", "data": "{{REFERENCE_IMAGE_BASE64}}" } }
+      ]
+    }
+  ]
+}
+```
+
 Optional env vars:
 
 - `NANO_BANANA_AUTH_HEADER` (default `Authorization`)
