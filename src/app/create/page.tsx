@@ -56,9 +56,23 @@ export default function CreatePage() {
     setTitle(existing.title ?? "");
     setSubtitle(existing.subtitle ?? "");
     setContact(existing.contact ?? "");
-    loadDraftPhoto(draftId).then((file) => {
-      if (file) setDogPhoto(file);
-    });
+
+    // Don't keep the uploaded image "sticky" across refresh/navigation.
+    // We only restore it when the user is mid-flow (clicked Generate, then authenticated via magic link).
+    if (isPendingGenerate(draftId)) {
+      loadDraftPhoto(draftId).then((file) => {
+        if (file) setDogPhoto(file);
+      });
+    } else {
+      // Clear any previously saved photo so refresh returns to a clean state.
+      clearDraftPhoto(draftId).catch(() => {});
+      setDogPhoto(null);
+    }
+
+    // On page switch/unmount, clear the stored photo so it doesn't persist.
+    return () => {
+      clearDraftPhoto(draftId).catch(() => {});
+    };
   }, []);
 
   // Persist draft (no DB writes unauthenticated).
@@ -110,6 +124,8 @@ export default function CreatePage() {
     const draftId = draftIdRef.current;
     setDogPhoto(file);
     if (!draftId) return;
+    // We store the photo temporarily to support the "login then resume" flow.
+    // It will be cleared on page navigation/unmount and after generation starts.
     if (file) await saveDraftPhoto(draftId, file);
     else await clearDraftPhoto(draftId);
   }, []);
@@ -155,6 +171,12 @@ export default function CreatePage() {
       if (uploadErr) {
         throw new Error(`Upload failed: ${uploadErr.message}`);
       }
+
+      // Clear the locally stored photo once it's uploaded.
+      if (draftIdRef.current) {
+        await clearDraftPhoto(draftIdRef.current);
+      }
+      setDogPhoto(null);
 
       const res = await fetch("/api/generations/start", {
         method: "POST",
